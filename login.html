@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión - Admin Torneo</title>
+    <!-- Cargamos Tailwind CSS v4 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-900 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100">
+        <div class="text-center mb-6">
+            <span class="text-4xl">🔐</span>
+            <h1 class="text-2xl font-black uppercase text-gray-900 tracking-tight mt-2">Acceso Administrativo</h1>
+            <p class="text-xs text-gray-400 mt-1">Ingresa tus credenciales para gestionar el torneo</p>
+        </div>
+
+        <!-- El id del formulario debe coincidir con el addEventListener del script -->
+        <form id="form-login" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Correo Electrónico</label>
+                <input type="email" id="login-email" placeholder="admin@correo.com" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none font-medium text-gray-900" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Contraseña</label>
+                <input type="password" id="login-password" placeholder="••••••••" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none text-gray-900" required>
+            </div>
+            <!-- Es indispensable que el type sea "submit" para que procese el formulario -->
+            <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all shadow-md cursor-pointer uppercase tracking-wider mt-2">
+                Ingresar al Panel
+            </button>
+        </form>
+
+        <div class="text-center mt-6">
+            <a href="index.html" class="text-xs font-semibold text-gray-400 hover:text-orange-500 transition-all">
+                ← Volver a la página pública
+            </a>
+        </div>
+    </div>
+
+    <!-- SCRIPTS DE CONEXIÓN -->
+    <!-- 1. Cargamos la biblioteca de Supabase en formato compatible con el navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/dist/umd/supabase.js"></script>
+    
+    <!-- 2. Lógica del inicio de sesión -->
+    <script>
+        // URL corregida con la letra "e" en lugar de la "a"
+        const SUPABASE_URL = 'https://vzouznekqycalzgswxos.supabase.co'; 
+        const SUPABASE_KEY = 'sb_publishable_Tm-IBIr0gRvjTWFhF5LNuQ_rMsgP3vo';
+        
+        // Inicialización limpia usando window.supabase estándar (sin el símbolo @)
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        document.getElementById('form-login').addEventListener('submit', async (e) => {
+            e.preventDefault(); // Evita que la página intente recargarse bruscamente
+            
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            console.log("Intentando iniciar sesión para el correo:", email);
+
+            try {
+                // Enviar la petición de autenticación a Supabase
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                
+                if (error) {
+                    console.error("Supabase rechazó las credenciales:", error);
+                    alert('❌ Error de acceso: ' + error.message);
+                } else {
+                    console.log("Sesión establecida correctamente:", data);
+                    alert('🔓 ¡Acceso concedido! Redirigiendo al panel administrativo...');
+                    window.location.href = 'admin.html';
+                }
+            } catch (err) {
+                console.error("Error crítico en el flujo de JavaScript:", err);
+                alert('⚠️ Ocurrió un fallo inesperado. Abre la consola con F12 para diagnosticar.');
+            }
+        });
+    </script>
+</body>
+</html>
