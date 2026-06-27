@@ -1,357 +1,294 @@
-// ==========================================================================
-// 1. CONFIGURACIÓN E INICIALIZACIÓN DE SUPABASE (VERSIÓN ISOLADA)
-// ==========================================================================
 const SUPABASE_URL = 'https://vzouznekqycalzgswxos.supabase.co'; 
-const SUPABASE_ANON_KEY = 'sb_publishable_Tm-IBIr0gRvjTWFhF5LNuQ_rMsgP3vo'; // Reemplaza con tu llave real
+const SUPABASE_ANON_KEY = 'sb_publishable_Tm-IBIr0gRvjTWFhF5LNuQ_rMsgP3vo';
 
-let supabaseClient = null;
 
-// Forzar la detección del objeto global correcto según el CDN usado
-try {
-    if (typeof window.supabase !== 'undefined') {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    } else if (typeof supabaseServer !== 'undefined') {
-        supabaseClient = supabaseServer.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    } else if (typeof supabase !== 'undefined' && supabase.createClient) {
-        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    } else {
-        console.error("❌ No se encontró ninguna variable global de Supabase. Revisa el script en tu HTML.");
-    }
-} catch (error) {
-    console.error("❌ Error crítico al inicializar el cliente de Supabase:", error.message);
-}
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ==========================================================================
-// 2. DETECTOR DE CARGA DE DOCUMENTO
-// ==========================================================================
-document.addEventListener('DOMContentLoaded', () => {
-    // Si no se pudo inicializar Supabase, mostrar error visual de inmediato
-    if (!supabaseClient) {
-        const selector = document.getElementById('categoria-select');
-        if (selector) selector.innerHTML = '<option value="">Error: Librería no cargada</option>';
-        return;
-    }
-    
-    inicializarSelectorTorneos();
-    configurarNavegacionPestañas();
+window.addEventListener('load', async () => {
+    await cargarFiltroTorneosPublico();
 });
 
-/**
- * Consulta las categorías de torneos existentes y monta el menú desplegable
- */
-async function inicializarSelectorTorneos() {
-    const selector = document.getElementById('categoria-select');
-    if (!selector) return;
-
+async function cargarFiltroTorneosPublico() {
     try {
-        // Hacemos la consulta usando el cliente verificado
-        const { data: torneos, error } = await supabaseClient
-            .from('torneos')
-            .select('*')
-            .order('nombre', { ascending: true });
-
+        const { data: torneos, error } = await supabaseClient.from('torneos').select('*');
         if (error) throw error;
 
-        // Limpiar el estado de "Cargando..."
-        selector.innerHTML = '<option value="" class="text-gray-800">-- Selecciona una Categoría --</option>';
-        
-        if (!torneos || torneos.length === 0) {
-            selector.innerHTML = '<option value="">No hay torneos activos</option>';
-            return;
+        const select = document.getElementById('categoria-select'); 
+        if (!select) return;
+
+        select.innerHTML = '<option value="">-- Seleccione Categoría --</option>';
+        if (torneos && torneos.length > 0) {
+            torneos.forEach(t => {
+                select.innerHTML += `<option value="${t.id}">${t.nombre}</option>`;
+            });
+            select.value = torneos[0].id;
+            await cargarDashboardPublico(torneos[0].id);
         }
 
-        // Inyectar las opciones
-        torneos.forEach(t => {
-            const opt = document.createElement('option');
-            opt.value = t.id;
-            opt.textContent = t.nombre;
-            opt.className = "text-gray-800";
-            selector.appendChild(opt);
-        });
-
-        // Escuchar cambios de categoría
-        selector.addEventListener('change', (e) => {
-            const torneoId = e.target.value;
-            if (torneoId) {
-                cargarPanelEstadistico(torneoId);
-            } else {
-                limpiarContenedores();
-            }
+        select.addEventListener('change', (e) => {
+            if (e.target.value) cargarDashboardPublico(e.target.value);
         });
 
     } catch (err) {
-        console.error("❌ Error al cargar torneos desde la Base de Datos:", err.message);
-        selector.innerHTML = '<option value="">Error al conectar con la BD</option>';
+        console.error("Error cargando categorías en app.js:", err.message);
     }
 }
 
-// ==========================================================================
-// 3. DESPACHADOR CENTRAL DE DATOS
-// ==========================================================================
-async function cargarPanelEstadistico(torneoId) {
-    await Promise.all([
-        calcularTablaPosiciones(torneoId),
-        calcularLideresIndividuales(torneoId),
-        construirCalendariosYResultados(torneoId)
-    ]);
+function formatearFechaTexto(fechaString) {
+    if (!fechaString) return "Fecha no asignada";
+    
+    const partes = fechaString.split('T');
+    const fechaPura = partes[0]; 
+    const horaPura = partes[1] ? partes[1].substring(0, 5) : "00:00"; 
+    
+    const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    const [anio, mes, dia] = fechaPura.split('-');
+    
+    return `${dia} ${meses[parseInt(mes, 10) - 1]}, ${horaPura}`;
 }
 
-// ==========================================================================
-// 4. TABLA DE POSICIONES
-// ==========================================================================
-async function calcularTablaPosiciones(torneoId) {
-    const tbody = document.getElementById('tabla-posiciones-body');
-    if (!tbody) return;
+async function cargarDashboardPublico(torneoId) {
+    try {
+        const [resPartidos, resJugadores, resEstadisticas] = await Promise.all([
+            // 🌟 Agregado 'comentario' a la consulta select de partidos
+            supabaseClient.from('partidos').select(`
+                id, fecha_hora, cancha, estado, puntos_local, puntos_visitante, comentario,
+                local:equipos!equipo_local_id(id, nombre, logo_url), 
+                visitante:equipos!equipo_visitante_id(id, nombre, logo_url)
+            `).eq('torneo_id', torneoId),
+            supabaseClient.from('jugadores').select(`
+                id, nombre_jugador, equipo_id, equipo:equipos(nombre)
+            `),
+            supabaseClient.from('estadisticas_partido').select('*')
+        ]);
 
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-gray-400 font-medium">Cargando datos...</td></tr>`;
+        if (resPartidos.error) throw resPartidos.error;
+
+        const partidos = resPartidos.data || [];
+        const jugadores = resJugadores.data || [];
+        let estadisticas = resEstadisticas.data || [];
+
+        const partidosIds = partidos.map(p => p.id);
+        estadisticas = estadisticas.filter(est => partidosIds.includes(est.partido_id));
+
+        const partidosOrdenados = partidos.sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+
+        const proximos = partidosOrdenados.filter(p => p.estado.toLowerCase() === 'programado');
+        const jugados = partidosOrdenados.filter(p => p.estado.toLowerCase() === 'finalizado');
+
+        renderProximosEncuentros(proximos);
+        renderHistorialResultados(jugados);
+
+        calcularTablaPosiciones(jugados, torneoId);
+        calcularLideresIndividuales(estadisticas, jugadores);
+
+    } catch (err) {
+        console.error("Error al procesar dashboard en app.js:", err.message);
+    }
+}
+
+function renderProximosEncuentros(partidos) {
+    const contenedor = document.getElementById('contenedor-proximos'); 
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (partidos.length === 0) {
+        contenedor.innerHTML = '<p class="text-sm text-slate-400 italic p-4 text-center">No hay partidos programados.</p>';
+        return;
+    }
+
+    partidos.forEach(p => {
+        const logoLocal = p.local?.logo_url || 'https://placehold.co/30x30/png?text=🏀';
+        const logoVisitante = p.visitante?.logo_url || 'https://placehold.co/30x30/png?text=🏀';
+
+        // Renderizado condicional del badge de comentario si existe
+        const badgeComentario = p.comentario 
+            ? `<span class="bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold px-2 py-0.5 rounded text-[10px] uppercase shadow-sm">${p.comentario}</span>` 
+            : '';
+
+        contenedor.innerHTML += `
+            <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm mb-3 flex flex-col gap-2 text-xs">
+                <div class="flex justify-between items-center border-b border-slate-50 pb-1.5">
+                    <div>
+                        <span class="text-indigo-600 font-bold block">📅 ${formatearFechaTexto(p.fecha_hora)}</span>
+                        <span class="text-slate-400 block">📍 ${p.cancha}</span>
+                    </div>
+                    ${badgeComentario}
+                </div>
+                <div class="flex justify-between items-center font-bold text-slate-800 text-sm py-1">
+                    <div class="flex items-center gap-1.5 justify-end w-28">
+                        <span class="truncate">${p.local?.nombre || 'Equipo'}</span>
+                        <img src="${logoLocal}" class="w-5 h-5 rounded-full object-cover border border-slate-100">
+                    </div>
+                    <span class="text-slate-300 text-xs font-normal">VS</span>
+                    <div class="flex items-center gap-1.5 justify-start w-28">
+                        <img src="${logoVisitante}" class="w-5 h-5 rounded-full object-cover border border-slate-100">
+                        <span class="truncate">${p.visitante?.nombre || 'Equipo'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+function renderHistorialResultados(partidos) {
+    const contenedor = document.getElementById('contenedor-historial'); 
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (partidos.length === 0) {
+        contenedor.innerHTML = '<p class="text-sm text-slate-400 italic p-4 text-center">No se registran partidos jugados.</p>';
+        return;
+    }
+
+    partidos.forEach(p => {
+        const logoLocal = p.local?.logo_url || 'https://placehold.co/40x40/png?text=🏀';
+        const logoVisitante = p.visitante?.logo_url || 'https://placehold.co/40x40/png?text=🏀';
+        
+        const ptsL = p.puntos_local || 0;
+        const ptsV = p.puntos_visitante || 0;
+
+        const ganoLocal = ptsL > ptsV;
+        const ganoVisitante = ptsV > ptsL;
+
+        // Renderizado condicional del badge de comentario si existe
+        const badgeComentario = p.comentario 
+            ? `<span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded text-[9px] uppercase tracking-wider shadow-sm border border-amber-200">${p.comentario}</span>` 
+            : '';
+
+        contenedor.innerHTML += `
+            <div class="bg-gradient-to-r from-slate-50 to-white p-4 rounded-xl border border-slate-200/80 shadow-sm mb-1 flex flex-col gap-2.5">
+                <div class="flex justify-between items-center text-[10px] text-slate-400 border-b border-slate-100 pb-1.5 font-medium">
+                    <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> Finalizado</span>
+                    <div class="flex items-center gap-2">
+                        ${badgeComentario}
+                        <span>Ob🕒 ${formatearFechaTexto(p.fecha_hora)} | 📍 ${p.cancha}</span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-7 items-center text-xs">
+                    <div class="col-span-3 flex items-center gap-2 justify-end text-right pr-1">
+                        <span class="truncate font-bold ${ganoLocal ? 'text-slate-900 font-black' : 'text-slate-500'}">${p.local?.nombre || 'Equipo'}</span>
+                        <img src="${logoLocal}" class="w-7 h-7 rounded-full object-cover shadow-sm border border-slate-200 shrink-0">
+                    </div>
+                    
+                    <div class="col-span-1 flex justify-center items-center gap-1 bg-slate-100 py-1 px-2 rounded-lg font-mono font-black text-sm text-slate-800 shadow-inner">
+                        <span class="${ganoLocal ? 'text-indigo-600 scale-105' : 'text-slate-600'}">${ptsL}</span>
+                        <span class="text-slate-300 font-normal text-xs">:</span>
+                        <span class="${ganoVisitante ? 'text-indigo-600 scale-105' : 'text-slate-600'}">${ptsV}</span>
+                    </div>
+                    
+                    <div class="col-span-3 flex items-center gap-2 justify-start text-left pl-1">
+                        <img src="${logoVisitante}" class="w-7 h-7 rounded-full object-cover shadow-sm border border-slate-200 shrink-0">
+                        <span class="truncate font-bold ${ganoVisitante ? 'text-slate-900 font-black' : 'text-slate-500'}">${p.visitante?.nombre || 'Equipo'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+async function calcularTablaPosiciones(partidosJugados, torneoId) {
+    const tbody = document.getElementById('tabla-posiciones-body'); 
+    if (!tbody) return;
+    tbody.innerHTML = '';
 
     try {
-        const { data: equipos, error: errEq } = await supabaseClient
-            .from('equipos')
-            .select('*')
-            .eq('torneo_id', torneoId);
+        const { data: equipos } = await supabaseClient.from('equipos').select('*').eq('torneo_id', torneoId);
+        if (!equipos) return;
 
-        const { data: partidos, error: errPt } = await supabaseClient
-            .from('partidos')
-            .select('*')
-            .eq('torneo_id', torneoId)
-            .eq('estado', 'finalizado');
-
-        if (errEq || errPt) throw new Error(errEq?.message || errPt?.message);
-
-        const registros = {};
-        equipos.forEach(e => {
-            registros[e.id] = {
-                nombre: e.nombre, logo: e.logo_url,
-                pj: 0, pg: 0, pp: 0, pf: 0, pc: 0, pts: 0
-            };
+        const tabla = {};
+        equipos.forEach(eq => {
+            tabla[eq.id] = { nombre: eq.nombre, logo: eq.logo_url, pj: 0, pg: 0, pp: 0, pf: 0, pc: 0, pts: 0 };
         });
 
-        partidos.forEach(p => {
-            const loc = registros[p.equipo_local_id];
-            const vis = registros[p.equipo_visitante_id];
+        partidosJugados.forEach(p => {
+            const idL = p.local?.id;
+            const idV = p.visitante?.id;
+            const ptsL = p.puntos_local || 0;
+            const ptsV = p.puntos_visitante || 0;
 
-            if (loc && vis) {
-                const scL = p.puntos_local || 0;
-                const scV = p.puntos_visitante || 0;
+            if (tabla[idL] && tabla[idV]) {
+                tabla[idL].pj++; tabla[idV].pj++;
+                tabla[idL].pf += ptsL; tabla[idL].pc += ptsV;
+                tabla[idV].pf += ptsV; tabla[idV].pc += ptsL;
 
-                loc.pj += 1; vis.pj += 1;
-                loc.pf += scL; loc.pc += scV;
-                vis.pf += scV; vis.pc += scL;
-
-                if (scL > scV) {
-                    loc.pg += 1; loc.pts += 2;
-                    vis.pp += 1; vis.pts += 1;
-                } else if (scV > scL) {
-                    vis.pg += 1; vis.pts += 2;
-                    loc.pp += 1; loc.pts += 1;
+                if (ptsL > ptsV) {
+                    tabla[idL].pg++; tabla[idL].pts += 2; 
+                    tabla[idV].pp++; tabla[idV].pts += 1; 
+                } else {
+                    tabla[idV].pg++; tabla[idV].pts += 2;
+                    tabla[idL].pp++; tabla[idL].pts += 1;
                 }
             }
         });
 
-        const clasificacion = Object.values(registros).sort((a, b) => {
-            if (b.pts !== a.pts) return b.pts - a.pts;
-            return (b.pf - b.pc) - (a.pf - a.pc);
-        });
+        const ordenados = Object.values(tabla).sort((a, b) => b.pts - a.pts || (b.pf - b.pc) - (a.pf - a.pc));
 
-        tbody.innerHTML = '';
-        if (clasificacion.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-gray-400">No hay equipos registrados en esta categoría.</td></tr>`;
-            return;
-        }
-
-        clasificacion.forEach((eq, idx) => {
-            const tr = document.createElement('tr');
-            tr.className = "border-b border-gray-100 hover:bg-gray-50/50 transition-colors";
-            tr.innerHTML = `
-                <td class="p-4 text-center font-bold text-gray-500">${idx + 1}</td>
-                <td class="p-4 font-bold text-gray-800 flex items-center gap-3">
-                    ${eq.logo ? `<img src="${eq.logo}" class="w-6 h-6 object-contain rounded">` : '🛡️'}
-                    <span>${eq.nombre}</span>
-                </td>
-                <td class="p-4 text-center text-gray-600">${eq.pj}</td>
-                <td class="p-4 text-center text-emerald-600 font-bold">${eq.pg}</td>
-                <td class="p-4 text-center text-red-600 font-bold">${eq.pp}</td>
-                <td class="p-4 text-center text-gray-600">${eq.pf}</td>
-                <td class="p-4 text-center text-gray-600">${eq.pc}</td>
-                <td class="p-4 text-center font-extrabold bg-amber-50/70 text-amber-900 rounded-lg">${eq.pts}</td>
+        ordenados.forEach((eq, index) => {
+            tbody.innerHTML += `
+                <tr class="border-b border-slate-100 text-xs font-semibold text-slate-700">
+                    <td class="p-3 text-center text-slate-400 font-bold">${index + 1}</td>
+                    <td class="p-3 flex items-center gap-2">
+                        <img src="${eq.logo || 'https://placehold.co/30x30/png?text=🏀'}" class="w-6 h-6 rounded-full object-cover border">
+                        <span>${eq.nombre}</span>
+                    </td>
+                    <td class="p-3 text-center">${eq.pj}</td>
+                    <td class="p-3 text-center text-emerald-600">${eq.pg}</td>
+                    <td class="p-3 text-center text-red-500">${eq.pp}</td>
+                    <td class="p-3 text-center">${eq.pf}</td>
+                    <td class="p-3 text-center">${eq.pc}</td>
+                    <td class="p-3 text-center font-black text-slate-900 bg-slate-50/50">${eq.pts}</td>
+                </tr>
             `;
-            tbody.appendChild(tr);
         });
-
-    } catch (err) {
-        console.error(err);
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-red-500 font-semibold">❌ Error de conexión: ${err.message}</td></tr>`;
-    }
+    } catch (err) { console.error(err); }
 }
 
-// ==========================================================================
-// 5. LÍDERES INDIVIDUALES
-// ==========================================================================
-async function calcularLideresIndividuales(torneoId) {
-    try {
-        const { data: stats, error } = await supabaseClient
-            .from('estadisticas_partido')
-            .select(`
-                puntos, triples, asistencias,
-                jugadores (nombre_jugador, equipos (nombre, torneo_id))
-            `);
+function calcularLideresIndividuales(estadisticas, jugadores) {
+    const totales = {};
+    
+    estadisticas.forEach(est => {
+        if (!totales[est.jugador_id]) totales[est.jugador_id] = { pts: 0, tri: 0, ast: 0 };
+        totales[est.jugador_id].pts += est.puntos || 0;
+        totales[est.jugador_id].tri += est.triples || 0;
+        totales[est.jugador_id].ast += est.asistencias || 0;
+    });
 
-        if (error) throw error;
+    const mapeoJugadores = {};
+    jugadores.forEach(j => { mapeoJugadores[j.id] = { nombre: j.nombre_jugador, equipo: j.equipo?.nombre || 'Club' }; });
 
-        const registrosTorneo = stats.filter(s => s.jugadores?.equipos?.torneo_id == torneoId);
-        const acumuladoJugadores = {};
-
-        registrosTorneo.forEach(s => {
-            const nombre = s.jugadores.nombre_jugador;
-            const equipoNom = s.jugadores.equipos.nombre;
-
-            if (!acumuladoJugadores[nombre]) {
-                acumuladoJugadores[nombre] = { nombre, equipo: equipoNom, puntos: 0, triples: 0, asistencias: 0 };
-            }
-            acumuladoJugadores[nombre].puntos += s.puntos || 0;
-            acumuladoJugadores[nombre].triples += s.triples || 0;
-            acumuladoJugadores[nombre].asistencias += s.asistencias || 0;
-        });
-
-        const listado = Object.values(acumuladoJugadores);
-
-        inyectarFilasTop(listado, 'puntos', 'contenedor-lideres-puntos', 'Pts');
-        inyectarFilasTop(listado, 'triples', 'contenedor-lideres-triples', 'Triples');
-        inyectarFilasTop(listado, 'asistencias', 'contenedor-lideres-asistencias', 'Asist');
-
-    } catch (err) {
-        console.error("Error al procesar líderes:", err);
-    }
+    renderLiderEstructural('lista-lideres-puntos', totales, mapeoJugadores, 'pts', 'PTS');
+    renderLiderEstructural('lista-lideres-triples', totales, mapeoJugadores, 'tri', 'TRIPLES');
+    renderLiderEstructural('lista-lideres-asistencias', totales, mapeoJugadores, 'ast', 'ASIST');
 }
 
-function inyectarFilasTop(lista, metrica, idContenedor, tag) {
-    const contenedor = document.getElementById(idContenedor);
-    if (!contenedor) return;
+function renderLiderEstructural(idContenedor, totales, mapeo, campo, sufijo) {
+    const el = document.getElementById(idContenedor);
+    if (!el) return; 
+    el.innerHTML = ''; 
 
-    const top3 = lista.filter(j => j[metrica] > 0).sort((a, b) => b[metrica] - a[metrica]).slice(0, 3);
+    const ordenados = Object.keys(totales)
+        .map(jId => ({ id: jId, valor: totales[jId][campo], ...mapeo[jId] }))
+        .filter(j => j.nombre && j.valor > 0)
+        .sort((a, b) => b.valor - a.valor)
+        .slice(0, 5); // Renderiza el Top 5 perfectamente
 
-    contenedor.innerHTML = '';
-    if (top3.length === 0) {
-        contenedor.innerHTML = `<p class="text-xs text-center text-gray-400 py-4">Sin registros</p>`;
+    if (ordenados.length === 0) {
+        el.innerHTML = '<p class="text-xs text-slate-400 italic p-2 text-center">Sin registros en este torneo</p>';
         return;
     }
 
-    top3.forEach((j, i) => {
-        const div = document.createElement('div');
-        div.className = "flex justify-between items-center text-xs py-2 border-b border-gray-50 last:border-0";
-        div.innerHTML = `
-            <div class="truncate pr-2">
-                <span class="font-bold text-gray-400 mr-1">#${i + 1}</span>
-                <span class="font-bold text-gray-700">${j.nombre}</span>
-                <span class="text-[10px] text-gray-400 block truncate font-medium">${j.equipo}</span>
-            </div>
-            <div class="font-black text-amber-700 bg-amber-50 border border-amber-200/40 px-2 py-1 rounded-md shrink-0">
-                ${j[metrica]} <span class="text-[9px] font-bold text-amber-500 uppercase">${tag}</span>
+    ordenados.forEach((jug, idx) => {
+        el.innerHTML += `
+            <div class="flex justify-between items-center text-xs border-b border-slate-50 py-1.5 font-medium">
+                <div>
+                    <span class="text-slate-400 font-bold mr-1">#${idx+1}</span>
+                    <span class="text-slate-800 font-bold">${jug.nombre}</span>
+                    <span class="text-[10px] text-slate-400 block">${jug.equipo}</span>
+                </div>
+                <span class="bg-amber-50 text-amber-700 font-black px-2 py-0.5 rounded-md text-[10px]">${jug.valor} ${sufijo}</span>
             </div>
         `;
-        contenedor.appendChild(div);
     });
-}
-
-// ==========================================================================
-// 6. PRÓXIMOS ENCUENTROS E HISTORIAL
-// ==========================================================================
-async function construirCalendariosYResultados(torneoId) {
-    try {
-        const { data: partidos, error: errP } = await supabaseClient
-            .from('partidos')
-            .select('*')
-            .eq('torneo_id', torneoId)
-            .order('fecha_hora', { ascending: true });
-
-        const { data: equipos, error: errE } = await supabaseClient
-            .from('equipos')
-            .select('id, nombre, logo_url')
-            .eq('torneo_id', torneoId);
-
-        if (errP || errE) throw new Error("Error trayendo encuentros");
-
-        const mapaEquipos = {};
-        equipos.forEach(e => { mapaEquipos[e.id] = e; });
-
-        const contProximos = document.getElementById('contenedor-proximos');
-        const contHistorial = document.getElementById('contenedor-historial');
-
-        contProximos.innerHTML = '';
-        contHistorial.innerHTML = '';
-
-        let flagProx = false, flagHist = false;
-
-        partidos.forEach(p => {
-            const loc = mapaEquipos[p.equipo_local_id] || { nombre: 'Por definir', logo_url: '' };
-            const vis = mapaEquipos[p.equipo_visitante_id] || { nombre: 'Por definir', logo_url: '' };
-            
-            const fecha = new Date(p.fecha_hora).toLocaleString('es-ES', { 
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-            });
-
-            const cardHTML = `
-                <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-3">
-                    <div class="flex justify-between items-center text-[10px] text-gray-400 font-bold border-b border-gray-50 pb-2">
-                        <span>📅 ${fecha}</span>
-                        <span class="truncate max-w-[180px]">📍 ${p.cancha || 'Gimnasio Municipal'}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-2 w-5/12 overflow-hidden">
-                            ${loc.logo_url ? `<img src="${loc.logo_url}" class="w-5 h-5 object-contain shrink-0">` : '🛡️'}
-                            <span class="font-bold text-xs text-gray-700 truncate">${loc.nombre}</span>
-                        </div>
-                        <div class="w-2/12 text-center shrink-0">
-                            ${p.estado === 'finalizado'
-                                ? `<span class="bg-slate-900 text-white font-black text-xs px-2 py-1 rounded-md">${p.puntos_local}-${p.puntos_visitante}</span>`
-                                : `<span class="text-gray-300 font-extrabold text-xs tracking-wider">VS</span>`
-                            }
-                        </div>
-                        <div class="flex items-center gap-2 w-5/12 justify-end text-right overflow-hidden">
-                            <span class="font-bold text-xs text-gray-700 truncate">${vis.nombre}</span>
-                            ${vis.logo_url ? `<img src="${vis.logo_url}" class="w-5 h-5 object-contain shrink-0">` : '🛡️'}
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            if (p.estado === 'finalizado') {
-                contHistorial.insertAdjacentHTML('beforeend', cardHTML);
-                flagHist = true;
-            } else {
-                contProximos.insertAdjacentHTML('beforeend', cardHTML);
-                flagProx = true;
-            }
-        });
-
-        if (!flagProx) contProximos.innerHTML = `<p class="text-xs text-gray-400 text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">No hay partidos programados</p>`;
-        if (!flagHist) contHistorial.innerHTML = `<p class="text-xs text-gray-400 text-center py-6 bg-white rounded-xl border border-dashed border-gray-200">No se registran partidos jugados</p>`;
-
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-// ==========================================================================
-// 7. COMPONENTES AUXILIARES / INTERFAZ
-// ==========================================================================
-function configurarNavegacionPestañas() {
-    const links = document.querySelectorAll('nav a');
-    links.forEach(link => {
-        link.addEventListener('click', function() {
-            links.forEach(l => l.classList.remove('tab-active'));
-            this.classList.add('tab-active');
-        });
-    });
-    if (links.length > 0) links[0].classList.add('tab-active');
-}
-
-function limpiarContenedores() {
-    document.getElementById('tabla-posiciones-body').innerHTML = `<tr><td colspan="8" class="text-center p-8 text-gray-400">Selecciona una categoría arriba.</td></tr>`;
-    ['contenedor-lideres-puntos', 'contenedor-lideres-triples', 'contenedor-lideres-asistencias'].forEach(id => {
-        document.getElementById(id).innerHTML = `<p class="text-xs text-gray-400 text-center py-4">Selecciona una categoría</p>`;
-    });
-    document.getElementById('contenedor-proximos').innerHTML = `<p class="text-xs text-gray-400 py-4">Selecciona una categoría</p>`;
-    document.getElementById('contenedor-historial').innerHTML = `<p class="text-xs text-gray-400 py-4">Selecciona una categoría</p>`;
 }

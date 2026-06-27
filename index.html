@@ -3,124 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Torneo de Baloncesto - Estadísticas Oficiales</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style>
-        .tab-active { border-bottom-color: #f59e0b; color: #d97706; }
-    </style>
+    <title>Torneo de Baloncesto - Panel Público</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-gray-50 font-sans antialiased pb-12">
+<body class="bg-slate-100 font-sans text-slate-800">
 
-    <header class="bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row justify-between items-center gap-4">
+    <header class="bg-indigo-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-3">
                 <span class="text-3xl">🏀</span>
                 <div>
-                    <h1 class="text-2xl font-black tracking-tight uppercase">Torneo de Baloncesto</h1>
-                    <p class="text-xs text-orange-100 font-medium">Estadísticas y Resultados Oficiales</p>
+                    <h1 class="text-xl font-black tracking-tight">TORNEO DE BALONCESTO</h1>
+                    <p class="text-xs text-indigo-200">Resultados, Posiciones y Estadísticas en Vivo</p>
                 </div>
             </div>
-            <div class="w-full md:w-64">
-                <label class="block text-[10px] font-bold uppercase tracking-wider text-orange-100 mb-1">Categoría</label>
-                <select id="categoria-select" class="w-full bg-orange-800/40 border border-orange-400/30 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:outline-none focus:ring-2 focus:ring-amber-300">
-                    <option value="" class="text-gray-800">Cargando categorías...</option>
+            
+            <div class="w-full sm:w-64">
+                <label for="categoria-select" class="block text-[10px] uppercase tracking-wider text-indigo-300 font-bold mb-1">Seleccionar Categoría</label>
+                <select id="categoria-select" class="w-full bg-indigo-800 text-white border border-indigo-700 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer">
+                    <option value="">Cargando categorías...</option>
                 </select>
             </div>
         </div>
     </header>
 
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 flex gap-6 overflow-x-auto text-sm font-bold text-gray-500">
-            <a href="#seccion-posiciones" class="py-4 border-b-2 border-transparent hover:text-gray-700 whitespace-nowrap transition-all flex items-center gap-1">📊 POSICIONES</a>
-            <a href="#seccion-lideres" class="py-4 border-b-2 border-transparent hover:text-gray-700 whitespace-nowrap transition-all flex items-center gap-1">🔥 LÍDERES</a>
-            <a href="#seccion-encuentros" class="py-4 border-b-2 border-transparent hover:text-gray-700 whitespace-nowrap transition-all flex items-center gap-1">📅 PRÓXIMOS</a>
-            <a href="#seccion-encuentros" class="py-4 border-b-2 border-transparent hover:text-gray-700 whitespace-nowrap transition-all flex items-center gap-1">🏆 HISTORIAL</a>
+    <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="lg:col-span-1 flex flex-col gap-6">
+            
+            <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/60">
+                <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2 mb-3 flex items-center gap-2">
+                    <span>📅</span> Próximos Encuentros
+                </h2>
+                <div id="contenedor-proximos" class="flex flex-col gap-1">
+                    <p class="text-xs text-slate-400 italic text-center py-4">Cargando programación...</p>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/60">
+                <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2 mb-3 flex items-center gap-2">
+                    <span>🏁</span> Historial de Resultados
+                </h2>
+                <div id="contenedor-historial" class="grid grid-cols-1 gap-3">
+                    <p class="text-xs text-slate-400 italic text-center py-4">Cargando resultados...</p>
+                </div>
+            </section>
+
         </div>
-    </nav>
 
-    <main class="max-w-7xl mx-auto px-4 mt-8 flex flex-col gap-10">
-
-        <section id="seccion-posiciones" class="scroll-mt-24">
-            <div class="flex items-center gap-2 mb-4">
-                <span class="text-xl">📊</span>
-                <h2 class="text-lg font-black uppercase text-slate-800 tracking-tight">Tabla de Posiciones</h2>
-            </div>
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="lg:col-span-2 flex flex-col gap-6">
+            
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden">
+                <div class="p-4 border-b border-slate-100">
+                    <h2 class="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                        <span>📊</span> Tabla de Posiciones
+                    </h2>
+                </div>
+                
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse text-sm">
+                    <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-gray-50/70 border-b border-gray-100 text-[11px] font-bold text-gray-400 uppercase">
-                                <th class="p-4 text-center w-16">Pos</th>
-                                <th class="p-4">Equipo</th>
-                                <th class="p-4 text-center w-16">PJ</th>
-                                <th class="p-4 text-center w-16 text-emerald-600">PG</th>
-                                <th class="p-4 text-center w-16 text-red-600">PP</th>
-                                <th class="p-4 text-center w-20">PF</th>
-                                <th class="p-4 text-center w-20">PC</th>
-                                <th class="p-4 text-center w-20 bg-amber-50/50 text-amber-700 font-bold">PTS</th>
+                            <tr class="bg-slate-50 text-[10px] uppercase tracking-wider font-bold text-slate-500 border-b border-slate-100">
+                                <th class="p-3 text-center w-12">Pos</th>
+                                <th class="p-3">Equipo</th>
+                                <th class="p-3 text-center">PJ</th>
+                                <th class="p-3 text-center text-emerald-600">PG</th>
+                                <th class="p-3 text-center text-red-500">PP</th>
+                                <th class="p-3 text-center">PF</th>
+                                <th class="p-3 text-center">PC</th>
+                                <th class="p-3 text-center bg-slate-100/80 text-slate-800 font-black w-14">PTS</th>
                             </tr>
                         </thead>
-                        <tbody id="tabla-posiciones-body" class="divide-y divide-gray-100 text-gray-700">
+                        <tbody id="tabla-posiciones-body">
                             <tr>
-                                <td colspan="8" class="text-center p-8 text-gray-400 font-medium">Por favor, selecciona una categoría arriba para cargar los datos.</td>
+                                <td colspan="8" class="text-center p-6 text-xs text-slate-400 italic">Cargando tabla de posiciones...</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section id="seccion-lideres" class="scroll-mt-24">
-            <div class="flex items-center gap-2 mb-4">
-                <span class="text-xl">🔥</span>
-                <h2 class="text-lg font-black uppercase text-slate-800 tracking-tight">Líderes Individuales</h2>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 class="font-black text-gray-800 text-sm border-b border-gray-100 pb-2 mb-3 flex items-center gap-2">🏀 Puntos</h3>
-                    <div id="contenedor-lideres-puntos" class="space-y-2">
-                        <p class="text-xs text-gray-400 text-center py-4">Selecciona una categoría</p>
+            <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-2 flex items-center gap-1.5">
+                            <span class="text-amber-500">🔥</span> Líderes Puntos
+                        </h3>
+                        <div id="lista-lideres-puntos" class="space-y-1">
+                            <p class="text-[11px] text-slate-400 italic p-2 text-center">Selecciona una categoría</p>
+                        </div>
                     </div>
                 </div>
-                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 class="font-black text-gray-800 text-sm border-b border-gray-100 pb-2 mb-3 flex items-center gap-2">🎯 Triples</h3>
-                    <div id="contenedor-lideres-triples" class="space-y-2">
-                        <p class="text-xs text-gray-400 text-center py-4">Selecciona una categoría</p>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-2 flex items-center gap-1.5">
+                            <span class="text-blue-500">🎯</span> Líderes Triples
+                        </h3>
+                        <div id="lista-lideres-triples" class="space-y-1">
+                            <p class="text-[11px] text-slate-400 italic p-2 text-center">Selecciona una categoría</p>
+                        </div>
                     </div>
                 </div>
-                <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <h3 class="font-black text-gray-800 text-sm border-b border-gray-100 pb-2 mb-3 flex items-center gap-2">🤝 Asistencias</h3>
-                    <div id="contenedor-lideres-asistencias" class="space-y-2">
-                        <p class="text-xs text-gray-400 text-center py-4">Selecciona una categoría</p>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-2 flex items-center gap-1.5">
+                            <span class="text-emerald-500">⚡</span> Líderes Asistencias
+                        </h3>
+                        <div id="lista-lideres-asistencias" class="space-y-1">
+                            <p class="text-[11px] text-slate-400 italic p-2 text-center">Selecciona una categoría</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
 
-        <section id="seccion-encuentros" class="grid grid-cols-1 md:grid-cols-2 gap-6 scroll-mt-24">
-            <div>
-                <div class="flex items-center gap-2 mb-4">
-                    <span class="text-xl">📅</span>
-                    <h2 class="text-lg font-black uppercase text-slate-800 tracking-tight">Próximos Encuentros</h2>
-                </div>
-                <div id="contenedor-proximos" class="flex flex-col gap-3">
-                    <p class="text-xs text-gray-400 py-4">Selecciona una categoría</p>
-                </div>
-            </div>
-            <div>
-                <div class="flex items-center gap-2 mb-4">
-                    <span class="text-xl">🏆</span>
-                    <h2 class="text-lg font-black uppercase text-slate-800 tracking-tight">Historial de Resultados</h2>
-                </div>
-                <div id="contenedor-historial" class="flex flex-col gap-3">
-                    <p class="text-xs text-gray-400 py-4">Selecciona una categoría</p>
-                </div>
-            </div>
-        </section>
+            </section>
 
+        </div>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
 </body>
 </html>
